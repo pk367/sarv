@@ -1,0 +1,5 @@
+pandas
+websocket-client
+requests
+fastapi 
+uvicorn
