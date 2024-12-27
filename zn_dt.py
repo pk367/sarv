@@ -39,8 +39,7 @@ def fetch_stock_data_and_resample(symbol,exchange,n_bars,htf_interval,interval,k
 
         # Check if stock_data is None
         if stock_data is not None and not stock_data.empty:  # Added check for empty DataFrame
-            stock_data.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close','volume':'Volume'}, inplace=True)
-            stock_data.index = stock_data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+             stock_data.index = stock_data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
 
             df = stock_data.round(2)
             resample_rules = {
@@ -54,11 +53,11 @@ def fetch_stock_data_and_resample(symbol,exchange,n_bars,htf_interval,interval,k
 
             df = df.resample(rule=rule, closed='left', label='left', origin=df.index.min()).agg(
                 OrderedDict([
-                    ('Open', 'first'),
-                    ('High', 'max'),
-                    ('Low', 'min'),
-                    ('Close', 'last'),
-                    ('Volume', 'sum')
+                    ('open', 'first'),
+                    ('high', 'max'),
+                    ('low', 'min'),
+                    ('close', 'last'),
+                    ('volume', 'sum')
                 ])
             ).dropna()
 
@@ -68,8 +67,7 @@ def fetch_stock_data_and_resample(symbol,exchange,n_bars,htf_interval,interval,k
 
         # Check if stock_data is None
         if stock_data_htf is not None and not stock_data_htf.empty:  # Added check for empty DataFrame
-            stock_data_htf.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
-            stock_data_htf.index = stock_data_htf.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+             stock_data_htf.index = stock_data_htf.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
 
             stock_data_htf = stock_data_htf.round(2)
 
@@ -91,8 +89,7 @@ def fetch_stock_data(symbol, exchange, n_bars, htf_interval, interval):
 
         # Check if stock_data is None
         if stock_data is not None and not stock_data.empty:  # Added check for empty DataFrame
-            stock_data.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
-            stock_data.index = stock_data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+             stock_data.index = stock_data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
 
             stock_data = stock_data.round(2)
         # Fetch historical data using tvDatafeed
@@ -100,8 +97,7 @@ def fetch_stock_data(symbol, exchange, n_bars, htf_interval, interval):
 
         # Check if stock_data is None
         if stock_data_htf is not None and not stock_data_htf.empty:  # Added check for empty DataFrame
-            stock_data_htf.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
-            stock_data_htf.index = stock_data_htf.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+             stock_data_htf.index = stock_data_htf.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
 
             stock_data_htf = stock_data_htf.round(2)
 
