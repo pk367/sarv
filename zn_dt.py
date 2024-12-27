@@ -1,12 +1,15 @@
-
-
-
 import mysql.connector
 import pandas as pd
 import logging
 import pytz
 import json
 import time
+from collections import OrderedDict
+import math
+ from datetime import timedelta
+import time
+from datetime import datetime, timedelta
+from tvDatafeed import TvDatafeed, Interval
 
 
 from datetime import datetime, timedelta # Configure logging
@@ -28,17 +31,89 @@ def create_db_config(suffix):
         logger.error(f"Error creating DB config: {e}")
         return None
 
-def get_ohlc_data(cursor, symbol):
+def fetch_stock_data_and_resample(symbol,exchange,n_bars,htf_interval,interval,key ):
     try:
-        query = """
-            SELECT symbol, datetime, open, high, low, close, volume
-            FROM ohlc_data
-            WHERE symbol IN (%s)
-        """ % ','.join(['%s'] * len(symbol))
-        cursor.execute(query, symbol)
-        return cursor.fetchall()
+
+        # Fetch historical data using tvDatafeed
+        stock_data = tv.get_hist(symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars)  # Use parameters correctly
+
+        # Check if stock_data is None
+        if stock_data is not None and not stock_data.empty:  # Added check for empty DataFrame
+            stock_data.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close','volume':'Volume'}, inplace=True)
+            stock_data.index = stock_data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+
+            df = stock_data.round(2)
+            resample_rules = {
+                '10 Minutes': '10T',
+                '75 Minutes': '75T',
+                '125 Minutes': '125T'
+               }
+
+            rule = resample_rules.get(key)
+
+
+            df = df.resample(rule=rule, closed='left', label='left', origin=df.index.min()).agg(
+                OrderedDict([
+                    ('Open', 'first'),
+                    ('High', 'max'),
+                    ('Low', 'min'),
+                    ('Close', 'last'),
+                    ('Volume', 'sum')
+                ])
+            ).dropna()
+
+            stock_data = df.round(2)
+        # Fetch historical data using tvDatafeed
+        stock_data_htf = tv.get_hist(symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars)  # Use parameters correctly
+
+        # Check if stock_data is None
+        if stock_data_htf is not None and not stock_data_htf.empty:  # Added check for empty DataFrame
+            stock_data_htf.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
+            stock_data_htf.index = stock_data_htf.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+
+            stock_data_htf = stock_data_htf.round(2)
+
+
+            return stock_data,stock_data_htf
+        else:
+            print(f"No data found for {symbol} on {exchange}.")
+            return None  # Return None if no data is found
     except Exception as e:
-        print(f"Error fetching OHLC data: {e}")
+        print(f"Error fetching data for {symbol}: {e}")
+        return None  # Return None in case of an error
+
+def fetch_stock_data(symbol, exchange, n_bars, htf_interval, interval):
+    try:
+        # print(f"Fetching data for {symbol} on {exchange} with n_bars={n_bars}, htf_interval={htf_interval}, interval={interval}")
+
+        # Fetch historical data using tvDatafeed
+        stock_data = tv.get_hist(symbol=symbol, exchange=exchange, interval=interval , n_bars=n_bars)  # Use parameters correctly
+
+        # Check if stock_data is None
+        if stock_data is not None and not stock_data.empty:  # Added check for empty DataFrame
+            stock_data.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
+            stock_data.index = stock_data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+
+            stock_data = stock_data.round(2)
+        # Fetch historical data using tvDatafeed
+        stock_data_htf = tv.get_hist(symbol=symbol, exchange=exchange, interval=htf_interval, n_bars=n_bars)  # Use parameters correctly
+
+        # Check if stock_data is None
+        if stock_data_htf is not None and not stock_data_htf.empty:  # Added check for empty DataFrame
+            stock_data_htf.rename(columns={'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close'}, inplace=True)
+            stock_data_htf.index = stock_data_htf.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+
+            stock_data_htf = stock_data_htf.round(2)
+
+
+            return stock_data,stock_data_htf
+        else:
+            print(f"No data found for {symbol} on {exchange}.")
+            return None  # Return None if no data is found
+    except Exception as e:
+        print(f"Error fetching data for {symbol}: {e}")
+        return None  # Return None in case of an error
+
 
 def calculate_atr(stock_data, length=14):
     stock_data['previous_close'] = stock_data['close'].shift(1)
@@ -55,7 +130,6 @@ def calculate_atr(stock_data, length=14):
     stock_data['Candle_Range'] = stock_data['high'] - stock_data['low']
     stock_data['Candle_Body'] = abs(stock_data['close'] - stock_data['open'])
     return stock_data.round(2)
-
 
 def check_golden_crossover(stock_data_htf, pulse_check_start_date):
     is_pulse_positive = ""  # Initialize an empty string to store the is_pulse_positive
@@ -688,7 +762,7 @@ def batch_insert_candles(cursor, data_to_insert):
         except mysql.connector.Error as err:
             logger.error(f"Database error during batch insert: {err}")
             raise
- tickers = ['BORORENEW', 'RAJESHEXPO', 'SUZLON', 'ASAHIINDIA', 'ZENSARTECH', 'ADANIGREEN', 'ADANIPOWER', 'GLAXO', 'RAILTEL', 'TTML', 'SOBHA', 'INOXWIND', 'FEDERALBNK', 'OBEROIRLTY', 'COCHINSHIP', 'AVANTIFEED', 'COFORGE', 'CAMS', 'SUNDRMFAST', 'OIL', 'HONAUT', 'MRF', 'ATGL', 'EICHERMOT', 'NAM-INDIA', 'TIMKEN', 'PNCINFRA', 'GRINDWELL', 'IRCON', 'NTPC', 'SUVENPHAR', 'BSE', 'TORNTPOWER', 'KPIL', 'JSWENERGY', 'LICI', 'ELGIEQUIP', 'JSWINFRA', 'HAPPYFORGE', 'DELHIVERY', 'NCC', 'TATATECH', '3MINDIA', 'PETRONET', 'KAYNES', 'ARE&M', 'ASTERDM', 'GRASIM', 'TORNTPHARM', 'ADANIENSOL', 'ISEC', 'SWANENERGY', 'PGHH', 'RAMCOCEM', 'SCHAEFFLER', 'ITC', 'SHREECEM', 'VIJAYA', 'DMART', 'JKLAKSHMI', 'MASTEK', 'APOLLOHOSP', 'CELLO', 'GODREJIND', 'SWSOLAR', 'LT', 'ULTRACEMCO', 'GODREJPROP', 'CENTURYPLY', 'SYRMA', 'HSCL', 'PPLPHARMA', 'DALBHARAT', 'ACC', 'AJANTPHARM', 'PAGEIND', 'BEML', 'JBMA', 'ZEEL', 'EIHOTEL', 'ROUTE', 'KNRCON', 'HINDUNILVR', 'TITAGARH', 'BDL', 'MEDPLUS', 'BIRLACORPN', 'VGUARD', 'RATNAMANI', 'PRESTIGE', 'TATACONSUM', 'APLLTD', 'PIDILITIND', 'NYKAA', 'HOMEFIRST', 'MARUTI', 'ASTRAZEN', 'UTIAMC', 'TEJASNET', 'GSFC', 'SIGNATURE', 'RCF', 'CONCOR', 'SUNPHARMA', 'BRIGADE', 'INDUSTOWER', 'BSOFT', 'EXIDEIND', 'GLAND', 'RAINBOW', 'PHOENIXLTD', 'DRREDDY', 'FORTIS', 'TCS', 'NH', 'RVNL', 'CESC', 'GRSE', 'ADANIPORTS', 'INFY', 'LUPIN', 'CIPLA', 'PRINCEPIPE', 'SAREGAMA', 'IRFC', 'LTTS', 'CARBORUNIV', 'MEDANTA', 'GSPL', 'KOTAKBANK', 'ADANIENT', 'SBIN', 'MPHASIS', 'LALPATHLAB', 'STARHEALTH', 'TMB', 'PRSMJOHNSN', 'ACE', 'ICICIBANK', 'CSBBANK', 'REDINGTON', 'KEI', 'UNOMINDA', 'BIKAJI', 'KIMS', 'ANURAS', 'VIPIND', 'M&M', 'CONCORDBIO', 'NUVAMA', 'CRISIL', 'AXISBANK', 'PNB', 'MAPMYINDIA', 'CREDITACC', 'IPCALAB', 'ASHOKLEY', 'IRB', 'IRCTC', 'HAPPSTMNDS', 'IOB', 'GMDCLTD', 'SUNDARMFIN', 'LLOYDSME', 'GUJGASLTD', 'NETWORK18', 'BHARATFORG', 'BATAINDIA', 'MAHLIFE', 'BAJAJ-AUTO', 'KRBL', 'DOMS', 'JBCHEPHARM', 'TRITURBINE', 'HEROMOTOCO', 'AUROPHARMA', 'ERIS', 'USHAMART', 'UNIONBANK', 'CGPOWER', 'BANKBARODA', 'MOTHERSON', 'GESHIP', 'HDFCAMC', 'JAIBALAJI', 'NSLNISP', 'CERA', 'THERMAX', 'SONATSOFTW', 'TITAN', 'GLS', 'NATCOPHARM', 'GILLETTE', 'LODHA', 'EASEMYTRIP'
+tickers = ['BORORENEW', 'RAJESHEXPO', 'SUZLON', 'ASAHIINDIA', 'ZENSARTECH', 'ADANIGREEN', 'ADANIPOWER', 'GLAXO', 'RAILTEL', 'TTML', 'SOBHA', 'INOXWIND', 'FEDERALBNK', 'OBEROIRLTY', 'COCHINSHIP', 'AVANTIFEED', 'COFORGE', 'CAMS', 'SUNDRMFAST', 'OIL', 'HONAUT', 'MRF', 'ATGL', 'EICHERMOT', 'NAM-INDIA', 'TIMKEN', 'PNCINFRA', 'GRINDWELL', 'IRCON', 'NTPC', 'SUVENPHAR', 'BSE', 'TORNTPOWER', 'KPIL', 'JSWENERGY', 'LICI', 'ELGIEQUIP', 'JSWINFRA', 'HAPPYFORGE', 'DELHIVERY', 'NCC', 'TATATECH', '3MINDIA', 'PETRONET', 'KAYNES', 'ARE&M', 'ASTERDM', 'GRASIM', 'TORNTPHARM', 'ADANIENSOL', 'ISEC', 'SWANENERGY', 'PGHH', 'RAMCOCEM', 'SCHAEFFLER', 'ITC', 'SHREECEM', 'VIJAYA', 'DMART', 'JKLAKSHMI', 'MASTEK', 'APOLLOHOSP', 'CELLO', 'GODREJIND', 'SWSOLAR', 'LT', 'ULTRACEMCO', 'GODREJPROP', 'CENTURYPLY', 'SYRMA', 'HSCL', 'PPLPHARMA', 'DALBHARAT', 'ACC', 'AJANTPHARM', 'PAGEIND', 'BEML', 'JBMA', 'ZEEL', 'EIHOTEL', 'ROUTE', 'KNRCON', 'HINDUNILVR', 'TITAGARH', 'BDL', 'MEDPLUS', 'BIRLACORPN', 'VGUARD', 'RATNAMANI', 'PRESTIGE', 'TATACONSUM', 'APLLTD', 'PIDILITIND', 'NYKAA', 'HOMEFIRST', 'MARUTI', 'ASTRAZEN', 'UTIAMC', 'TEJASNET', 'GSFC', 'SIGNATURE', 'RCF', 'CONCOR', 'SUNPHARMA', 'BRIGADE', 'INDUSTOWER', 'BSOFT', 'EXIDEIND', 'GLAND', 'RAINBOW', 'PHOENIXLTD', 'DRREDDY', 'FORTIS', 'TCS', 'NH', 'RVNL', 'CESC', 'GRSE', 'ADANIPORTS', 'INFY', 'LUPIN', 'CIPLA', 'PRINCEPIPE', 'SAREGAMA', 'IRFC', 'LTTS', 'CARBORUNIV', 'MEDANTA', 'GSPL', 'KOTAKBANK', 'ADANIENT', 'SBIN', 'MPHASIS', 'LALPATHLAB', 'STARHEALTH', 'TMB', 'PRSMJOHNSN', 'ACE', 'ICICIBANK', 'CSBBANK', 'REDINGTON', 'KEI', 'UNOMINDA', 'BIKAJI', 'KIMS', 'ANURAS', 'VIPIND', 'M&M', 'CONCORDBIO', 'NUVAMA', 'CRISIL', 'AXISBANK', 'PNB', 'MAPMYINDIA', 'CREDITACC', 'IPCALAB', 'ASHOKLEY', 'IRB', 'IRCTC', 'HAPPSTMNDS', 'IOB', 'GMDCLTD', 'SUNDARMFIN', 'LLOYDSME', 'GUJGASLTD', 'NETWORK18', 'BHARATFORG', 'BATAINDIA', 'MAHLIFE', 'BAJAJ-AUTO', 'KRBL', 'DOMS', 'JBCHEPHARM', 'TRITURBINE', 'HEROMOTOCO', 'AUROPHARMA', 'ERIS', 'USHAMART', 'UNIONBANK', 'CGPOWER', 'BANKBARODA', 'MOTHERSON', 'GESHIP', 'HDFCAMC', 'JAIBALAJI', 'NSLNISP', 'CERA', 'THERMAX', 'SONATSOFTW', 'TITAN', 'GLS', 'NATCOPHARM', 'GILLETTE', 'LODHA', 'EASEMYTRIP']
 
 interval_options = {
     #'1 Minutes': Interval.in_1_minute,
