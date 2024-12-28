@@ -4,13 +4,7 @@ import logging
 import pytz
 import json
 import time
-from collections import OrderedDict
-import math
-from datetime import timedelta
-import time
-from datetime import datetime, timedelta
 from tvDatafeed import TvDatafeed, Interval
-
 
 from datetime import datetime, timedelta # Configure logging
 logger = logging.getLogger()
@@ -31,10 +25,11 @@ def create_db_config(suffix):
         logger.error(f"Error creating DB config: {e}")
         return None
 
-def fetch_stock_data_and_resample(symbol, exchange, n_bars, htf_interval, interval, key):
+def fetch_stock_data_and_resample(symbol, exchange, n_bars, htf_interval, interval, key,fut_contract):
     try:
+        tv = TvDatafeed()
         # Fetch historical data using tvDatafeed
-        stock_data = tv.get_hist(symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars)  # Use parameters correctly
+        stock_data = tv.get_hist(symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars,fut_contract=fut_contract)  # Use parameters correctly
 
         # Check if stock_data is None
         if stock_data is not None and not stock_data.empty:  # Added check for empty DataFrame
@@ -81,27 +76,27 @@ def fetch_stock_data_and_resample(symbol, exchange, n_bars, htf_interval, interv
 
 def fetch_stock_data(symbol, exchange, n_bars, htf_interval, interval):
     try:
-        # print(f"Fetching data for {symbol} on {exchange} with n_bars={n_bars}, htf_interval={htf_interval}, interval={interval}")
+        tv = TvDatafeed()
 
         # Fetch historical data using tvDatafeed
-        stock_data = tv.get_hist(symbol=symbol, exchange=exchange, interval=interval , n_bars=n_bars)  # Use parameters correctly
+        stock_data = tv.get_hist(symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars)  # Use parameters correctly
 
         # Check if stock_data is None
         if stock_data is not None and not stock_data.empty:  # Added check for empty DataFrame
-             stock_data.index = stock_data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+            stock_data.index = stock_data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
 
             stock_data = stock_data.round(2)
+
         # Fetch historical data using tvDatafeed
         stock_data_htf = tv.get_hist(symbol=symbol, exchange=exchange, interval=htf_interval, n_bars=n_bars)  # Use parameters correctly
 
-        # Check if stock_data is None
+        # Check if stock_data_htf is None
         if stock_data_htf is not None and not stock_data_htf.empty:  # Added check for empty DataFrame
-             stock_data_htf.index = stock_data_htf.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+            stock_data_htf.index = stock_data_htf.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
 
             stock_data_htf = stock_data_htf.round(2)
 
-
-            return stock_data,stock_data_htf
+            return stock_data, stock_data_htf
         else:
             print(f"No data found for {symbol} on {exchange}.")
             return None  # Return None if no data is found
@@ -125,6 +120,7 @@ def calculate_atr(stock_data, length=14):
     stock_data['Candle_Range'] = stock_data['high'] - stock_data['low']
     stock_data['Candle_Body'] = abs(stock_data['close'] - stock_data['open'])
     return stock_data.round(2)
+
 
 def check_golden_crossover(stock_data_htf, pulse_check_start_date):
     is_pulse_positive = ""  # Initialize an empty string to store the is_pulse_positive
@@ -545,7 +541,7 @@ def find_patterns(ticker, stock_data, stock_data_htf, interval_key, max_base_can
 
                             # Code block to execute if any condition was met
                             if condition_met:
-                                if interval_key in ('1D','1Wk','1Mo') :
+                                if interval_key in ('1d','1wk','1mo') :
                                     legin_date = stock_data.index[legin_candle_index].strftime('%Y-%m-%d')
                                     legout_date = stock_data.index[i].strftime('%Y-%m-%d')
                                 else:
@@ -703,14 +699,7 @@ def find_patterns(ticker, stock_data, stock_data_htf, interval_key, max_base_can
     except Exception as e:
         print(f"Error processing {ticker}: {e}")
         return []
-def get_unique_symbols(cursor):
-    try:
-        query = "SELECT DISTINCT symbol FROM ohlc_data ORDER BY symbol ASC"
-        cursor.execute(query)
-        return [row[0] for row in cursor.fetchall()]
-    except Exception as e:
-        print(f"Error retrieving unique symbols: {e}")
-        return []
+
 
 
 def batch_insert_candles(cursor, data_to_insert):
@@ -757,153 +746,157 @@ def batch_insert_candles(cursor, data_to_insert):
         except mysql.connector.Error as err:
             logger.error(f"Database error during batch insert: {err}")
             raise
-tickers = ['BORORENEW', 'RAJESHEXPO', 'SUZLON', 'ASAHIINDIA']
-
-interval_options = {
-    '1 Minutes': Interval.in_1_minute,
-    #'3 Minutes': Interval.in_3_minute,
-    #'5 Minutes': Interval.in_5_minute,
-    #'10 Minutes': Interval.in_5_minute,  # Corrected
-    #'15 Minutes': Interval.in_15_minute,
-    #'30 Minutes': Interval.in_30_minute,
-    #'1 Hour': Interval.in_1_hour,
-    #'75 Minutes': Interval.in_15_minute,  # Consider adjusting this
-    #'2 Hours': Interval.in_2_hour,
-    #'125 Minutes': Interval.in_5_minute,  # Consider adjusting this
-    #'1 Day': Interval.in_daily,
-    #'1 Week': Interval.in_weekly,
-    #'1 Month': Interval.in_monthly
-}
-
-htf_interval_option = {
-    '1 Minutes': Interval.in_15_minute,
-    '3 Minutes': Interval.in_1_hour,
-    '5 Minutes': Interval.in_1_hour,
-    '10 Minutes': Interval.in_daily,
-    '15 Minutes': Interval.in_daily,
-    '30 Minutes': Interval.in_daily,
-    '1 Hour': Interval.in_weekly,
-    '75 Minutes': Interval.in_weekly,
-    '2 Hours': Interval.in_weekly,
-    '125 Minutes': Interval.in_weekly,
-    '1 Day': Interval.in_monthly,
-    '1 Week': Interval.in_monthly,
-    '1 Month': Interval.in_monthly
-}
-
-reward_mapping = {
-    '1 Minutes': 3,
-    '3 Minutes': 3,
-    '5 Minutes': 3,
-    '1 Day': 10,
-    '1 Week': 10,
-    '1 Month': 10
-}
-
-max_base_candles = 3
-time_frame_patterns = {interval: [] for interval in interval_options}
-
-# Set fixed values for zone status and type
-fresh_zone_allowed = True
-target_zone_allowed = True
-stoploss_zone_allowed = True
-scan_demand_zone_allowed = True
-scan_supply_zone_allowed = True
-
-tv = TvDatafeed()
-exchange = 'NSE'
-n_bars = 50000
-
-# Iterate over each interval
-for key, interval in interval_options.items():
-    htf_interval = htf_interval_option.get(key, None)
-    reward_value = reward_mapping.get(key, 5)
-
-    # Iterate over each ticker
-    for i, ticker in enumerate(tickers):
-        try:
-            if key in ['10 Minutes', '75 Minutes', '125 Minutes']:
-                stock_data, stock_data_htf = fetch_stock_data_and_resample(ticker, exchange, n_bars, htf_interval, interval, key)
-            else:
-                stock_data, stock_data_htf = fetch_stock_data(ticker, exchange, n_bars, htf_interval, interval)
-
-
-            stock_data = calculate_atr(stock_data)
-            columns_to_remove = ['symbol', 'tr1', 'tr2', 'tr3', 'previous_close']
-            stock_data = stock_data.drop(columns=columns_to_remove, errors='ignore')
-
-            print(f" for {ticker} , {len(stock_data)} row(s) downloaded in keytimeframe: {key} =====>>> which is {interval} >>>>>>> and {len(stock_data_htf)} row(s) downloaded in HTF: {htf_interval}, used reward_value: {reward_value} ")
-            patterns = find_patterns(ticker, stock_data, stock_data_htf, interval, max_base_candles, scan_demand_zone_allowed, scan_supply_zone_allowed, reward_value, fresh_zone_allowed, target_zone_allowed, stoploss_zone_allowed, htf_interval)
-
-            if patterns:
-                 time_frame_patterns[key].extend(patterns)
-                 print(f"Processed {i + 1} out of {len(tickers)}: {ticker}")
-                 print("\n")
-
         except Exception as e:
-            print(f"Error processing ticker {ticker} with interval {key}: {e}")
+            logger.error(f"Error during batch insert: {e}")
+            raise
+def main():
+    connections = {}
+    cursors = {}
+    response_body = {"errors": [], "success": False}  # Added success flag
 
-                # Process collected patterns
-                if patterns:
-                    try:
-                        df = pd.DataFrame(patterns)
-                        df.fillna(0, inplace=True)
-                        data_to_insert = [tuple(row) for row in df.values]
-                        # Create zonedata connection
-                        config3 = create_db_config(timeframe)
-                        connections['zone'] = mysql.connector.connect(**config3)
-                        cursors['zone'] = connections['zone'].cursor()
-                        # Create table if not exists
-                        create_table_query = """
-                        CREATE TABLE IF NOT EXISTS zone_data (
-                            id INT AUTO_INCREMENT PRIMARY KEY,
-                            symbol VARCHAR(20),
-                            timeframe VARCHAR(5),
-                            zone_status VARCHAR(10),
-                            zone_type VARCHAR(8),
-                            entry_price DECIMAL(10, 2),
-                            stop_loss DECIMAL(10, 2),
-                            target DECIMAL(10, 2),
-                            legin_date DATETIME,
-                            base_count INT,
-                            legout_count INT,
-                            legout_date DATETIME,
-                            entry_date DATETIME,
-                            exit_date DATETIME,
-                            is_pulse_positive VARCHAR(6),
-                            is_candle_green VARCHAR(6),
-                            is_trend_up VARCHAR(6),
-                            is_white_area VARCHAR(6),
-                            legin_not_covered VARCHAR(6),
-                            is_legout_formation VARCHAR(6),
-                            is_wick_in_legin VARCHAR(6),
-                            is_legin_tr_pass VARCHAR(6),
-                            is_legout_covered VARCHAR(6),
-                            is_one_two_ka_four VARCHAR(6),
-                            UNIQUE KEY unique_pattern (symbol, timeframe, entry_date, zone_type)
-                        );
-                        """
-                        cursors['zone'].execute(create_table_query)
+    try:
+        tickers = ['gold' ]#'RAJESHEXPO', 'SUZLON', 'ASAHIINDIA']
 
-                        # Insert data
-                        batch_insert_candles(cursors['zone'], data_to_insert)
-                        connections['zone'].commit()
-                        response_body["success"] = True
-                        print(f" for {ticker} total {len(df)} zone data sucessfully uploaded to database")
-                        #time.sleep(2)
-                        #clear_output(wait=True)  # Clear previous output
+        interval_options = {
+            '1d': Interval.in_daily,
+            # add more as needed
+        }
 
-                    except Exception as db_error:
-                        logger.error(f"Database operation error: {db_error}")
-                        response_body["errors"].append(f"Database operation error: {str(db_error)}")
-                        if 'zone' in connections:
-                            connections['zone'].rollback()
+        htf_interval_option = {
+            '1d': Interval.in_weekly,
+            # add more as needed
+        }
 
-                    finally:
-                        if 'zone' in cursors and cursors['zone']:
-                            cursors['zone'].close()
-                        if 'zone' in connections and connections['zone']:
-                            connections['zone'].close()
+        reward_mapping = {
+            '1m': 3,
+            '3m': 3,
+            '5m': 3,
+            '1d': 10,
+            '1wk': 10,
+            '1mo': 10
+        }
+
+        max_base_candles = 3
+        time_frame_patterns = {interval: [] for interval in interval_options}
+
+        # Set fixed values for zone status and type
+        fresh_zone_allowed = True
+        target_zone_allowed = True
+        stoploss_zone_allowed = True
+        scan_demand_zone_allowed = True
+        scan_supply_zone_allowed = True
+
+        tv = TvDatafeed()
+        exchange = 'mcx'
+        n_bars = 50000
+        fut_contract = 1
+        # Iterate over each interval
+        for key, interval in interval_options.items():
+            htf_interval = htf_interval_option.get(key, None)
+            reward_value = reward_mapping.get(key, 5)
+
+            # Iterate over each ticker
+            for i, ticker in enumerate(tickers):
+                try:
+                    if key in ['10m', '75m', '125m']:
+                        stock_data, stock_data_htf = fetch_stock_data_and_resample(ticker, exchange, n_bars, htf_interval, interval, key,fut_contract)
+                    else:
+                        stock_data, stock_data_htf = fetch_stock_data(ticker, exchange, n_bars, htf_interval, interval,fut_contract)
+
+                    # Correct check for empty DataFrame
+                    if stock_data is not None and not stock_data.empty:
+                        stock_data = calculate_atr(stock_data)
+                        stock_data = stock_data.drop(
+                            columns=['tr1', 'tr2', 'tr3', 'previous_close'],
+                            errors='ignore'
+                        )
+                    else:
+                        print(f"Warning: No data returned for {ticker} in timeframe {key}")
+                        continue
+
+                    if stock_data_htf is not None and not stock_data_htf.empty:
+                        # Process the stock_data_htf
+                        pass
+                    else:
+                        print(f"Warning: No high timeframe data returned for {ticker} in timeframe {key}")
+                        continue
+
+                    print(f"Finding zone in {ticker}...")
+
+                    patterns = find_patterns(
+                        ticker, stock_data, stock_data_htf, key,
+                        max_base_candles, reward_value,
+                        scan_demand_zone_allowed, scan_supply_zone_allowed,
+                        fresh_zone_allowed, target_zone_allowed,
+                        stoploss_zone_allowed, htf_interval
+                    )
+
+                    if patterns:
+                        print(f"{len(patterns)} zones found in {ticker}")
+                    #display(patterns)
+                    # Process collected patterns
+                    if patterns:
+                        try:
+                            df = pd.DataFrame(patterns)
+                            df.fillna(0, inplace=True)
+                            data_to_insert = [tuple(row) for row in df.values]
+                            # Create zonedata connection
+                            config3 = create_db_config(interval)
+                            connections['zone'] = mysql.connector.connect(**config3)
+                            cursors['zone'] = connections['zone'].cursor()
+                            # Create table if not exists
+                            create_table_query = """
+                            CREATE TABLE IF NOT EXISTS zone_data (
+                                id INT AUTO_INCREMENT PRIMARY KEY,
+                                symbol VARCHAR(20),
+                                timeframe VARCHAR(5),
+                                zone_status VARCHAR(10),
+                                zone_type VARCHAR(8),
+                                entry_price DECIMAL(10, 2),
+                                stop_loss DECIMAL(10, 2),
+                                target DECIMAL(10, 2),
+                                legin_date DATETIME,
+                                base_count INT,
+                                legout_count INT,
+                                legout_date DATETIME,
+                                entry_date DATETIME,
+                                exit_date DATETIME,
+                                is_pulse_positive VARCHAR(6),
+                                is_candle_green VARCHAR(6),
+                                is_trend_up VARCHAR(6),
+                                is_white_area VARCHAR(6),
+                                legin_not_covered VARCHAR(6),
+                                is_legout_formation VARCHAR(6),
+                                is_wick_in_legin VARCHAR(6),
+                                is_legin_tr_pass VARCHAR(6),
+                                is_legout_covered VARCHAR(6),
+                                is_one_two_ka_four VARCHAR(6),
+                                UNIQUE KEY unique_pattern (symbol, timeframe, entry_date, zone_type)
+                            );
+                            """
+                            cursors['zone'].execute(create_table_query)
+
+                            # Insert data
+                            batch_insert_candles(cursors['zone'], data_to_insert)
+                            connections['zone'].commit()
+                            response_body["success"] = True
+                            print(f"For {ticker}, total {len(df)} zone data successfully uploaded to database.")
+
+                        except Exception as db_error:
+                            logger.error(f"Database operation error: {db_error}")
+                            response_body["errors"].append(f"Database operation error: {str(db_error)}")
+                            if 'zone' in connections:
+                                connections['zone'].rollback()
+
+                        finally:
+                            if 'zone' in cursors and cursors['zone']:
+                                cursors['zone'].close()
+                            if 'zone' in connections and connections['zone']:
+                                connections['zone'].close()
+
+                except Exception as ticker_error:
+                    logger.error(f"Error processing ticker {ticker}: {ticker_error}")
+                    response_body["errors"].append(f"Error processing {ticker}: {str(ticker_error)}")
 
     except Exception as e:
         logger.error(f"Main process error: {e}")
