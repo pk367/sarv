@@ -6,7 +6,7 @@ import json
 import time
 from collections import OrderedDict
 import math
- from datetime import timedelta
+from datetime import timedelta
 import time
 from datetime import datetime, timedelta
 from tvDatafeed import TvDatafeed, Interval
