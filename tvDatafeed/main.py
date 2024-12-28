@@ -169,8 +169,8 @@ class TvDatafeed:
                 data.append(row)
 
             data = pd.DataFrame(
-                data, columns=["Datetime", "Open", "High", "Low", "Close", "Volume"]
-            ).set_index("Datetime")
+                data, columns=["datetime", "open", "high", "low", "close", "volume"]
+            ).set_index("datetime")
             data.insert(0, "Symbol", value=symbol)
             return data
         except AttributeError:
