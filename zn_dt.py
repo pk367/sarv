@@ -31,25 +31,23 @@ def create_db_config(suffix):
         logger.error(f"Error creating DB config: {e}")
         return None
 
-def fetch_stock_data_and_resample(symbol,exchange,n_bars,htf_interval,interval,key ):
+def fetch_stock_data_and_resample(symbol, exchange, n_bars, htf_interval, interval, key):
     try:
-
         # Fetch historical data using tvDatafeed
         stock_data = tv.get_hist(symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars)  # Use parameters correctly
 
         # Check if stock_data is None
         if stock_data is not None and not stock_data.empty:  # Added check for empty DataFrame
-             stock_data.index = stock_data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+            stock_data.index = stock_data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
 
             df = stock_data.round(2)
             resample_rules = {
                 '10 Minutes': '10T',
                 '75 Minutes': '75T',
                 '125 Minutes': '125T'
-               }
+            }
 
             rule = resample_rules.get(key)
-
 
             df = df.resample(rule=rule, closed='left', label='left', origin=df.index.min()).agg(
                 OrderedDict([
@@ -62,23 +60,24 @@ def fetch_stock_data_and_resample(symbol,exchange,n_bars,htf_interval,interval,k
             ).dropna()
 
             stock_data = df.round(2)
+
         # Fetch historical data using tvDatafeed
         stock_data_htf = tv.get_hist(symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars)  # Use parameters correctly
 
-        # Check if stock_data is None
+        # Check if stock_data_htf is None
         if stock_data_htf is not None and not stock_data_htf.empty:  # Added check for empty DataFrame
-             stock_data_htf.index = stock_data_htf.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+            stock_data_htf.index = stock_data_htf.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
 
             stock_data_htf = stock_data_htf.round(2)
 
-
-            return stock_data,stock_data_htf
+            return stock_data, stock_data_htf
         else:
             print(f"No data found for {symbol} on {exchange}.")
             return None  # Return None if no data is found
     except Exception as e:
         print(f"Error fetching data for {symbol}: {e}")
         return None  # Return None in case of an error
+
 
 def fetch_stock_data(symbol, exchange, n_bars, htf_interval, interval):
     try:
