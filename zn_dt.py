@@ -21,10 +21,10 @@ logging.basicConfig(level=logging.INFO)
 def create_db_config(suffix):
     try:
         return {
-            'user': f'u417995338_OHLC{suffix}',
+            'user': f'u417995338_stocksZoneData',
             'password': 'Host@0904',
             'host': 'srv1668.hstgr.io',
-            'database': f'u417995338_OHLC{suffix}',
+            'database': f'u417995338_stocksZoneData',
             'connection_timeout': 100000  # Set connection timeout
         }
     except Exception as e:
@@ -758,14 +758,14 @@ def batch_insert_candles(cursor, data_to_insert):
         except mysql.connector.Error as err:
             logger.error(f"Database error during batch insert: {err}")
             raise
-tickers = ['BORORENEW', 'RAJESHEXPO', 'SUZLON', 'ASAHIINDIA', 'ZENSARTECH', 'ADANIGREEN', 'ADANIPOWER', 'GLAXO', 'RAILTEL', 'TTML', 'SOBHA', 'INOXWIND', 'FEDERALBNK', 'OBEROIRLTY', 'COCHINSHIP', 'AVANTIFEED', 'COFORGE', 'CAMS', 'SUNDRMFAST', 'OIL', 'HONAUT', 'MRF', 'ATGL', 'EICHERMOT', 'NAM-INDIA', 'TIMKEN', 'PNCINFRA', 'GRINDWELL', 'IRCON', 'NTPC', 'SUVENPHAR', 'BSE', 'TORNTPOWER', 'KPIL', 'JSWENERGY', 'LICI', 'ELGIEQUIP', 'JSWINFRA', 'HAPPYFORGE', 'DELHIVERY', 'NCC', 'TATATECH', '3MINDIA', 'PETRONET', 'KAYNES', 'ARE&M', 'ASTERDM', 'GRASIM', 'TORNTPHARM', 'ADANIENSOL', 'ISEC', 'SWANENERGY', 'PGHH', 'RAMCOCEM', 'SCHAEFFLER', 'ITC', 'SHREECEM', 'VIJAYA', 'DMART', 'JKLAKSHMI', 'MASTEK', 'APOLLOHOSP', 'CELLO', 'GODREJIND', 'SWSOLAR', 'LT', 'ULTRACEMCO', 'GODREJPROP', 'CENTURYPLY', 'SYRMA', 'HSCL', 'PPLPHARMA', 'DALBHARAT', 'ACC', 'AJANTPHARM', 'PAGEIND', 'BEML', 'JBMA', 'ZEEL', 'EIHOTEL', 'ROUTE', 'KNRCON', 'HINDUNILVR', 'TITAGARH', 'BDL', 'MEDPLUS', 'BIRLACORPN', 'VGUARD', 'RATNAMANI', 'PRESTIGE', 'TATACONSUM', 'APLLTD', 'PIDILITIND', 'NYKAA', 'HOMEFIRST', 'MARUTI', 'ASTRAZEN', 'UTIAMC', 'TEJASNET', 'GSFC', 'SIGNATURE', 'RCF', 'CONCOR', 'SUNPHARMA', 'BRIGADE', 'INDUSTOWER', 'BSOFT', 'EXIDEIND', 'GLAND', 'RAINBOW', 'PHOENIXLTD', 'DRREDDY', 'FORTIS', 'TCS', 'NH', 'RVNL', 'CESC', 'GRSE', 'ADANIPORTS', 'INFY', 'LUPIN', 'CIPLA', 'PRINCEPIPE', 'SAREGAMA', 'IRFC', 'LTTS', 'CARBORUNIV', 'MEDANTA', 'GSPL', 'KOTAKBANK', 'ADANIENT', 'SBIN', 'MPHASIS', 'LALPATHLAB', 'STARHEALTH', 'TMB', 'PRSMJOHNSN', 'ACE', 'ICICIBANK', 'CSBBANK', 'REDINGTON', 'KEI', 'UNOMINDA', 'BIKAJI', 'KIMS', 'ANURAS', 'VIPIND', 'M&M', 'CONCORDBIO', 'NUVAMA', 'CRISIL', 'AXISBANK', 'PNB', 'MAPMYINDIA', 'CREDITACC', 'IPCALAB', 'ASHOKLEY', 'IRB', 'IRCTC', 'HAPPSTMNDS', 'IOB', 'GMDCLTD', 'SUNDARMFIN', 'LLOYDSME', 'GUJGASLTD', 'NETWORK18', 'BHARATFORG', 'BATAINDIA', 'MAHLIFE', 'BAJAJ-AUTO', 'KRBL', 'DOMS', 'JBCHEPHARM', 'TRITURBINE', 'HEROMOTOCO', 'AUROPHARMA', 'ERIS', 'USHAMART', 'UNIONBANK', 'CGPOWER', 'BANKBARODA', 'MOTHERSON', 'GESHIP', 'HDFCAMC', 'JAIBALAJI', 'NSLNISP', 'CERA', 'THERMAX', 'SONATSOFTW', 'TITAN', 'GLS', 'NATCOPHARM', 'GILLETTE', 'LODHA', 'EASEMYTRIP']
+tickers = ['BORORENEW', 'RAJESHEXPO', 'SUZLON', 'ASAHIINDIA']
 
 interval_options = {
-    #'1 Minutes': Interval.in_1_minute,
+    '1 Minutes': Interval.in_1_minute,
     #'3 Minutes': Interval.in_3_minute,
     #'5 Minutes': Interval.in_5_minute,
     #'10 Minutes': Interval.in_5_minute,  # Corrected
-    '15 Minutes': Interval.in_15_minute,
+    #'15 Minutes': Interval.in_15_minute,
     #'30 Minutes': Interval.in_30_minute,
     #'1 Hour': Interval.in_1_hour,
     #'75 Minutes': Interval.in_15_minute,  # Consider adjusting this
@@ -811,10 +811,7 @@ stoploss_zone_allowed = True
 scan_demand_zone_allowed = True
 scan_supply_zone_allowed = True
 
-# Initialize TvDatafeed (no login required for public data)
-username = 'AKTradingWithSL'
-password = 'Bulky@001122'
-tv = TvDatafeed(username, password)
+tv = TvDatafeed()
 exchange = 'NSE'
 n_bars = 50000
 
