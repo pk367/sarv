@@ -3,6 +3,7 @@ from tvDatafeed import TvDatafeed, Interval
 from collections import OrderedDict
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+import pandas as pd
 
 app = FastAPI()
 
@@ -66,15 +67,18 @@ def fetch_stock_data_and_resample(symbol, exchange, interval_str, interval, n_ba
 
         rule = RULE_MAP.get(interval_str)
 
-        df = data.resample(rule=rule, closed='left', label='left', origin=data.index.min()).agg(
-            OrderedDict([
-                ('Open', 'first'),
-                ('High', 'max'),
-                ('Low', 'min'),
-                ('Close', 'last'),
-                ('Volume', 'sum')
-            ])
-        ).dropna()
+        if rule:
+            df = data.resample(rule=rule, closed='left', label='left', origin=data.index.min()).agg(
+                OrderedDict([
+                    ('Open', 'first'),
+                    ('High', 'max'),
+                    ('Low', 'min'),
+                    ('Close', 'last'),
+                    ('Volume', 'sum')
+                ])
+            ).dropna()
+        else:
+            df = data
 
         return df
 
