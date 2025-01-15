@@ -54,25 +54,25 @@ def fetch_stock_data_and_resample(symbol, exchange, interval_str, interval, n_ba
 
         # Mapping resampling rules
         RULE_MAP = {
-            'in_10_minute': '10T',  # 10 minutes
-            'in_75_minute': '75T',  # 75 minutes
-            'in_125_minute': '125T',  # 125 minutes
-            'in_5_hour': '5H',  # 5 hours
-            'in_6_hour': '6H',  # 6 hours
-            'in_8_hour': '8H',  # 8 hours
-            'in_10_hour': '10H',  # 10 hours
-            'in_12_hour': '12H',  # 12 hours
+            'in_10_minute': '10min',
+            'in_75_minute': '75min',
+            'in_125_minute': '125min',
+            'in_5_hour': '5h',
+            'in_6_hour': '6h',
+            'in_8_hour': '8h',
+            'in_10_hour': '10h',
+            'in_12_hour': '12h',
         }
 
         rule = RULE_MAP.get(interval_str)
 
         df = data.resample(rule=rule, closed='left', label='left', origin=data.index.min()).agg(
             OrderedDict([
-                ('Open', 'first'),
-                ('High', 'max'),
-                ('Low', 'min'),
-                ('Close', 'last'),
-                ('Volume', 'sum')
+                ('open', 'first'),
+                ('high', 'max'),
+                ('low', 'min'),
+                ('close', 'last'),
+                ('volume', 'sum')
             ])
         ).dropna()
 
@@ -127,4 +127,4 @@ def fetch_data(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host="0.0.0.0", port=8001)
