@@ -3,3 +3,4 @@ websocket-client
 requests
 fastapi 
 uvicorn
+git+https://github.com/pk367/datafeed.git
