@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from tvDatafeed import TvDatafeed, Interval
-from collections import OrderedDict
 import pandas as pd
 
 app = FastAPI()
@@ -14,7 +13,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
+INTERVAL_MAP = {
     "in_1_minute": Interval.in_1_minute,
     "in_3_minute": Interval.in_3_minute,
     "in_5_minute": Interval.in_5_minute,
@@ -37,7 +36,6 @@ app.add_middleware(
     "in_weekly": Interval.in_weekly,
     "in_monthly": Interval.in_monthly,
 }
-
 HTF_INTERVAL_MAP = {
     "in_1_minute": Interval.in_15_minute,
     "in_3_minute": Interval.in_1_hour,
@@ -86,6 +84,47 @@ def fetch_data(tv_datafeed, symbol, exchange, interval, n_bars, fut_contract=Non
         print(f"Error fetching data for symbol {symbol}: {e}")
         return None
 
+def fetch_stock_data_and_resample(symbol, exchange, interval_str, interval, htf_interval, n_bars, fut_contract):
+    """
+    Fetches and resamples stock data for a given symbol and interval.
+    """
+    tv_datafeed = TvDatafeed()
+
+    # Mapping resampling rules
+    RULE_MAP = {
+        'in_10_minute': '10min',
+        'in_75_minute': '75min',
+        'in_125_minute': '125min',
+    }
+
+    rule = RULE_MAP.get(interval_str)
+    if not rule:
+        print(f"Invalid interval_str: {interval_str}. No resampling rule found.")
+        return None, None
+
+    # Fetch initial data
+    symbol_data = fetch_data(tv_datafeed, symbol, exchange, interval, n_bars, fut_contract)
+    if symbol_data is None or symbol_data.empty:
+        print(f"No data found for symbol {symbol} on exchange {exchange} with interval {interval}")
+        return None, None
+
+    # Resample the data
+    symbol_data_resampled = symbol_data.resample(rule=rule, closed='left', label='left', origin=symbol_data.index.min()).agg({
+        'open': 'first',
+        'high': 'max',
+        'low': 'min',
+        'close': 'last',
+        'volume': 'sum'
+    }).dropna()
+
+    # Fetch higher time frame (HTF) data
+    symbol_data_htf = fetch_data(tv_datafeed, symbol, exchange, htf_interval, n_bars, fut_contract)
+    if symbol_data_htf is None or symbol_data_htf.empty:
+        print(f"No HTF data found for symbol {symbol} on exchange {exchange} with interval {htf_interval}")
+        return None, None
+
+    return symbol_data_resampled, symbol_data_htf
+
 @app.get("/")
 def home():
     return {"message": "Welcome to the Stock Data API"}
@@ -100,8 +139,6 @@ def fetch_data_endpoint(
 ):
     """
     Endpoint to fetch stock data using tvDatafeed.
-
-    Example: /fetch_data?symbol=gold,silver&exchange=mcx&interval=in_5_minute&n_bars=100&fut_contract=1
     """
     symbols = [s.strip() for s in symbol.split(",")]
     interval_enum = INTERVAL_MAP.get(interval)
@@ -111,14 +148,15 @@ def fetch_data_endpoint(
         raise HTTPException(status_code=400, detail=f"Invalid 'interval' value: {interval}")
 
     result = {}
-    tv_datafeed = TvDatafeed()
+    tv_datafeed = TvDatafeed()  # Initialize TvDatafeed once
 
     for sym in symbols:
         try:
             if interval in ['in_10_minute', 'in_75_minute', 'in_125_minute']:
                 stock_data, stock_data_htf = fetch_stock_data_and_resample(sym, exchange, interval, interval_enum, htf_interval_enum, n_bars, fut_contract)
             else:
-                stock_data, stock_data_htf = fetch_stock_data(sym, exchange, interval, interval_enum, htf_interval_enum, n_bars, fut_contract)
+                stock_data = fetch_data(tv_datafeed, sym, exchange, interval_enum, n_bars, fut_contract)
+                stock_data_htf = fetch_data(tv_datafeed, sym, exchange, htf_interval_enum, n_bars, fut_contract)
 
             if stock_data is not None and not stock_data.empty:
                 stock_data = calculate_atr(stock_data)
