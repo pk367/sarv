@@ -228,7 +228,7 @@ def check_legout_covered(it_is_demand_zone, stock_data, i, entry_index, total_ri
         return False
 
 
-def find_patterns(ticker, stock_data, stock_data_htf, interval_key, max_base_candles,reward_value, scan_demand_zone_allowed, scan_supply_zone_allowed, fresh_zone_allowed, target_zone_allowed, stoploss_zone_allowed, htf_interval):
+def find_patterns(ticker, exchange, stock_data, stock_data_htf, interval_key, max_base_candles,reward_value, scan_demand_zone_allowed, scan_supply_zone_allowed, fresh_zone_allowed, target_zone_allowed, stoploss_zone_allowed, htf_interval):
     try:
         patterns = []
         last_legout_high = []  # Initialize here to avoid error
@@ -443,6 +443,7 @@ def find_patterns(ticker, stock_data, stock_data_htf, interval_key, max_base_can
                                           one_two_ka_four = 'False'
                                       patterns.append({
                                             'symbol': ticker,
+                                            'exchange':exchange,
                                             'timeframe': interval_key,
                                             'zone_status': Zone_status,
                                             'zone_type': Pattern_name_is,  # corrected
@@ -674,6 +675,7 @@ def find_patterns(ticker, stock_data, stock_data_htf, interval_key, max_base_can
 
                                        patterns.append({
                                             'symbol': ticker,
+                                            'exchange': exchange,
                                             'timeframe': interval_key,
                                             'zone_status': Zone_status,
                                             'zone_type': Pattern_name_is,  # corrected
@@ -715,7 +717,7 @@ def batch_insert_candles(cursor, data_to_insert):
         batch = data_to_insert[i:i + batch_size]
         insert_query = """
             INSERT INTO zone_data (
-                symbol, timeframe,
+                symbol,exchange, timeframe,
                 zone_status, zone_type, entry_price, stop_loss, target,
                 legin_date, base_count, legout_count, legout_date,
                 entry_date, exit_date,
@@ -855,7 +857,7 @@ def fetch_data_endpoint(
                 stock_data = stock_data.drop(columns=['tr1', 'tr2', 'tr3', 'previous_close'], errors='ignore')
 
                 patterns = find_patterns(
-                    sym, stock_data, stock_data_htf, interval,
+                    sym,exchange, stock_data, stock_data_htf, interval,
                     max_base_candles, reward_value,
                     scan_demand_zone_allowed, scan_supply_zone_allowed,
                     fresh_zone_allowed, target_zone_allowed,
@@ -892,6 +894,7 @@ def fetch_data_endpoint(
             CREATE TABLE IF NOT EXISTS zone_data (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 symbol VARCHAR(20),
+                exchange VARCHAR(20),
                 timeframe VARCHAR(20),
                 zone_status VARCHAR(10),
                 zone_type VARCHAR(8),
