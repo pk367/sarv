@@ -765,7 +765,7 @@ def fetch_data_endpoint(
     exchange: str = Query(..., description="Exchange name"),
     interval: str = Query("in_daily", description="Interval string"),
     n_bars: int = Query(5000, description="Number of bars to fetch"),
-    fut_contract: Optional[int] = Query(None, description="Futures contract ID, if applicable")
+    fut_contract: int = Query(None, description="Futures contract ID, if applicable")
 ):
     """
     Endpoint to fetch stock data using tvDatafeed.
