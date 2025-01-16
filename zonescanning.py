@@ -22,10 +22,10 @@ app.add_middleware(
 def create_db_config(suffix):
     try:
         return {
-            'user': f'u417995338_stocksZoneData',
+            'user': f'u417995338_equityZoneData',
             'password': 'Host@0904',
             'host': 'srv1668.hstgr.io',
-            'database': f'u417995338_stocksZoneData',
+            'database': f'u417995338_equityZoneData',
             'connection_timeout': 100000  # Set connection timeout
         }
     except Exception as e:
