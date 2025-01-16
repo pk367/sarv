@@ -2,6 +2,9 @@ from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from tvDatafeed import TvDatafeed, Interval
 import pandas as pd
+import mysql.connector
+import json
+import logging
 
 app = FastAPI()
 
@@ -699,9 +702,9 @@ def batch_insert_candles(cursor, data_to_insert):
                 is_pulse_positive, is_candle_green, is_trend_up,
                 is_white_area, legin_not_covered, is_legout_formation,
                 is_wick_in_legin, is_legin_tr_pass, is_legout_covered,
-                is_one_two_ka_four
+                is_one_two_ka_four ,ohlc_data  
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
                 entry_price = VALUES(entry_price),
                 stop_loss = VALUES(stop_loss),
@@ -723,6 +726,7 @@ def batch_insert_candles(cursor, data_to_insert):
                 is_legout_covered = VALUES(is_legout_covered),
                 legout_count = VALUES(legout_count),
                 is_one_two_ka_four = VALUES(is_one_two_ka_four)
+                ohlc_data = VALUES(ohlc_data)
         """
         try:
             cursor.executemany(insert_query, batch)
@@ -733,6 +737,8 @@ def batch_insert_candles(cursor, data_to_insert):
         except Exception as e:
             logger.error(f"Error during batch insert: {e}")
             raise
+
+
 
 @app.get("/")
 def home():
@@ -751,42 +757,42 @@ def fetch_data_endpoint(
     """
 
     INTERVAL_MAP = {
-    "in_1_minute": Interval.in_1_minute,
-    "in_3_minute": Interval.in_3_minute,
-    "in_5_minute": Interval.in_5_minute,
-    "in_10_minute": Interval.in_5_minute,
-    "in_15_minute": Interval.in_15_minute,
-    "in_30_minute": Interval.in_30_minute,
-    "in_45_minute": Interval.in_45_minute,
-    "in_75_minute": Interval.in_15_minute,
-    "in_125_minute": Interval.in_5_minute,
-    "in_1_hour": Interval.in_1_hour,
-    "in_2_hour": Interval.in_2_hour,
-    "in_3_hour": Interval.in_3_hour,
-    "in_4_hour": Interval.in_4_hour,
-    "in_5_hour": Interval.in_1_hour,
-    "in_6_hour": Interval.in_3_hour,
-    "in_8_hour": Interval.in_4_hour,
-    "in_10_hour": Interval.in_1_hour,
-    "in_12_hour": Interval.in_1_hour,
-    "in_daily": Interval.in_daily,
-    "in_weekly": Interval.in_weekly,
-    "in_monthly": Interval.in_monthly,
+        "in_1_minute": Interval.in_1_minute,
+        "in_3_minute": Interval.in_3_minute,
+        "in_5_minute": Interval.in_5_minute,
+        "in_10_minute": Interval.in_5_minute,
+        "in_15_minute": Interval.in_15_minute,
+        "in_30_minute": Interval.in_30_minute,
+        "in_45_minute": Interval.in_45_minute,
+        "in_75_minute": Interval.in_15_minute,
+        "in_125_minute": Interval.in_5_minute,
+        "in_1_hour": Interval.in_1_hour,
+        "in_2_hour": Interval.in_2_hour,
+        "in_3_hour": Interval.in_3_hour,
+        "in_4_hour": Interval.in_4_hour,
+        "in_5_hour": Interval.in_1_hour,
+        "in_6_hour": Interval.in_3_hour,
+        "in_8_hour": Interval.in_4_hour,
+        "in_10_hour": Interval.in_1_hour,
+        "in_12_hour": Interval.in_1_hour,
+        "in_daily": Interval.in_daily,
+        "in_weekly": Interval.in_weekly,
+        "in_monthly": Interval.in_monthly,
     }
     HTF_INTERVAL_MAP = {
-    "in_1_minute": Interval.in_15_minute,
-    "in_3_minute": Interval.in_1_hour,
-    "in_5_minute": Interval.in_1_hour,
-    "in_10_minute": Interval.in_daily,
-    "in_15_minute": Interval.in_daily,
-    "in_30_minute": Interval.in_daily,
-    "in_1_hour": Interval.in_weekly,
-    "in_75_minute": Interval.in_weekly,
-    "in_2_hour": Interval.in_weekly,
-    "in_125_minute": Interval.in_weekly,
-    "in_daily": Interval.in_monthly,
-    "in_weekly": Interval.in_monthly,
-    "in_monthly": Interval.in_monthly,
+        "in_1_minute": Interval.in_15_minute,
+        "in_3_minute": Interval.in_1_hour,
+        "in_5_minute": Interval.in_1_hour,
+        "in_10_minute": Interval.in_daily,
+        "in_15_minute": Interval.in_daily,
+        "in_30_minute": Interval.in_daily,
+        "in_1_hour": Interval.in_weekly,
+        "in_75_minute": Interval.in_weekly,
+        "in_2_hour": Interval.in_weekly,
+        "in_125_minute": Interval.in_weekly,
+        "in_daily": Interval.in_monthly,
+        "in_weekly": Interval.in_monthly,
+        "in_monthly": Interval.in_monthly,
     }
 
     reward_mapping = {
@@ -797,7 +803,7 @@ def fetch_data_endpoint(
         'in_weekly': 10,
         'in_monthly': 10
     }
-    
+
     max_base_candles = 3
     fresh_zone_allowed = True
     target_zone_allowed = True
@@ -810,6 +816,7 @@ def fetch_data_endpoint(
     htf_interval_enum = HTF_INTERVAL_MAP.get(interval)
     reward_value = reward_mapping.get(interval, 5)
 
+    all_patterns = []
     connections = {}
     cursors = {}
     response_body = {"errors": [], "success": False}  # Added success flag
@@ -843,69 +850,77 @@ def fetch_data_endpoint(
             )
 
             if patterns:
+                all_patterns.extend(patterns)
                 print(f"{len(patterns)} zones found in {sym}")
-                # Process collected patterns
-                try:
-                    df = pd.DataFrame(patterns)
-                    df.fillna(0, inplace=True)
-                    data_to_insert = [tuple(row) for row in df.values]
-                    # Create zonedata connection
-                    config = create_db_config(interval)
-                    connections['zone'] = mysql.connector.connect(**config)
-                    cursors['zone'] = connections['zone'].cursor()
-                    # Create table if not exists
-                    create_table_query = """
-                    CREATE TABLE IF NOT EXISTS zone_data (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        symbol VARCHAR(20),
-                        timeframe VARCHAR(5),
-                        zone_status VARCHAR(10),
-                        zone_type VARCHAR(8),
-                        entry_price DECIMAL(10, 2),
-                        stop_loss DECIMAL(10, 2),
-                        target DECIMAL(10, 2),
-                        legin_date DATETIME,
-                        base_count INT,
-                        legout_count INT,
-                        legout_date DATETIME,
-                        entry_date DATETIME,
-                        exit_date DATETIME,
-                        is_pulse_positive VARCHAR(6),
-                        is_candle_green VARCHAR(6),
-                        is_trend_up VARCHAR(6),
-                        is_white_area VARCHAR(6),
-                        legin_not_covered VARCHAR(6),
-                        is_legout_formation VARCHAR(6),
-                        is_wick_in_legin VARCHAR(6),
-                        is_legin_tr_pass VARCHAR(6),
-                        is_legout_covered VARCHAR(6),
-                        is_one_two_ka_four VARCHAR(6),
-                        UNIQUE KEY unique_pattern (symbol, timeframe, entry_date, zone_type)
-                    );
-                    """
-                    cursors['zone'].execute(create_table_query)
-
-                    # Insert data
-                    batch_insert_candles(cursors['zone'], data_to_insert)
-                    connections['zone'].commit()
-                    response_body["success"] = True
-                    print(f"For {sym}, total {len(df)} zone data successfully uploaded to database.")
-
-                except Exception as db_error:
-                    logger.error(f"Database operation error: {db_error}")
-                    response_body["errors"].append(f"Database operation error: {str(db_error)}")
-                    if 'zone' in connections:
-                        connections['zone'].rollback()
-
-                finally:
-                    if 'zone' in cursors and cursors['zone']:
-                        cursors['zone'].close()
-                    if 'zone' in connections and connections['zone']:
-                        connections['zone'].close()
 
         except Exception as ticker_error:
             logger.error(f"Error processing ticker {sym}: {ticker_error}")
             response_body["errors"].append(f"Error processing {sym}: {str(ticker_error)}")
+
+    if all_patterns:
+        # Process collected patterns
+        try:
+            df = pd.DataFrame(all_patterns)
+            df.fillna(0, inplace=True)
+            data_to_insert = [tuple(row) for row in df.values]
+            data_to_insert = [
+                (*row[:-1], json.dumps(row[-1]))  # Convert the last column (ohlc_data) to JSON
+                for row in data_to_insert
+            ]
+            # Create zonedata connection
+            config = create_db_config(interval)
+            connections['zone'] = mysql.connector.connect(**config)
+            cursors['zone'] = connections['zone'].cursor()
+            # Create table if not exists
+            create_table_query = """
+            CREATE TABLE IF NOT EXISTS zone_data (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                symbol VARCHAR(20),
+                timeframe VARCHAR(5),
+                zone_status VARCHAR(10),
+                zone_type VARCHAR(8),
+                entry_price DECIMAL(10, 2),
+                stop_loss DECIMAL(10, 2),
+                target DECIMAL(10, 2),
+                legin_date DATETIME,
+                base_count INT,
+                legout_count INT,
+                legout_date DATETIME,
+                entry_date DATETIME,
+                exit_date DATETIME,
+                is_pulse_positive VARCHAR(6),
+                is_candle_green VARCHAR(6),
+                is_trend_up VARCHAR(6),
+                is_white_area VARCHAR(6),
+                legin_not_covered VARCHAR(6),
+                is_legout_formation VARCHAR(6),
+                is_wick_in_legin VARCHAR(6),
+                is_legin_tr_pass VARCHAR(6),
+                is_legout_covered VARCHAR(6),
+                is_one_two_ka_four VARCHAR(6),
+                ohlc_data JSON,
+                UNIQUE KEY unique_pattern (symbol, timeframe, entry_date, zone_type)
+            );
+            """
+            cursors['zone'].execute(create_table_query)
+
+            # Insert data
+            batch_insert_candles(cursors['zone'], data_to_insert)
+            connections['zone'].commit()
+            response_body["success"] = True
+            print(f"Total {len(df)} zone data successfully uploaded to database.")
+
+        except Exception as db_error:
+            logger.error(f"Database operation error: {db_error}")
+            response_body["errors"].append(f"Database operation error: {str(db_error)}")
+            if 'zone' in connections:
+                connections['zone'].rollback()
+
+        finally:
+            if 'zone' in cursors and cursors['zone']:
+                cursors['zone'].close()
+            if 'zone' in connections and connections['zone']:
+                connections['zone'].close()
 
     return response_body
 
