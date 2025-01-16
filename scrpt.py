@@ -222,16 +222,10 @@ def fetch_data(
             else:
                 print(f"Warning: No data returned for {ticker} in timeframe {key}")
                 continue
-             patterns = find_patterns(
-                ticker, stock_data, stock_data_htf, key,
-                max_base_candles, reward_value,
-                scan_demand_zone_allowed, scan_supply_zone_allowed,
-                fresh_zone_allowed, target_zone_allowed,
-                stoploss_zone_allowed, htf_interval
-            )
+
     
-            if patterns:
-                print(f"{len(patterns)} zones found in {ticker}")
+            if stock_data:
+                print(f"{len(stock_data)} zones found in {ticker}")
 
         except Exception as e:
             result[sym] = {"error": f"Error fetching data for {sym}: {str(e)}"}
