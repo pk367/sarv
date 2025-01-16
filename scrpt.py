@@ -71,8 +71,27 @@ def calculate_atr(stock_data, length=14):
     stock_data['Candle_Body'] = abs(stock_data['close'] - stock_data['open'])
     return stock_data.round(2)
 
+from tvDatafeed import TvDatafeed, Interval
+from collections import OrderedDict
+import pandas as pd
 
-def fetch_stock_data_and_resample(symbol, exchange, interval_str, interval, htf_interval, n_bars, fut_contract):
+def fetch_data(tv_datafeed, symbol, exchange, interval, n_bars, fut_contract=None):
+    """Fetches historical data for the given symbol and interval."""
+    try:
+        if fut_contract:
+            data = tv_datafeed.get_hist(symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars, fut_contract=fut_contract)
+        else:
+            data = tv_datafeed.get_hist(symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars)
+        
+        if data is not None and not data.empty:
+            data.index = data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+            data = data.round(2)
+        return data
+    except Exception as e:
+        print(f"Error fetching data for symbol {symbol}: {e}")
+        return None
+
+def fetch_stock_data_and_resample(symbol, exchange, interval_str, interval, htf_interval, n_bars, fut_contract=None):
     """
     Fetches and resamples stock data for a given symbol and interval.
 
@@ -89,68 +108,73 @@ def fetch_stock_data_and_resample(symbol, exchange, interval_str, interval, htf_
         tuple: A tuple containing two DataFrames: (resampled_data, htf_data).
               Returns (None, None) if data fetching fails.
     """
-    try:
-        tv_datafeed = TvDatafeed()
+    tv_datafeed = TvDatafeed()
 
-        # Helper function to fetch data
-        def fetch_data(symbol, exchange, interval, n_bars, fut_contract):
-            """Fetches historical data for the given symbol and interval."""
-            if fut_contract:
-                return tv_datafeed.get_hist(symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars, fut_contract=fut_contract)
-            else:
-                return tv_datafeed.get_hist(symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars)
+    # Mapping resampling rules
+    RULE_MAP = {
+        'in_10_minute': '10min',
+        'in_75_minute': '75min',
+        'in_125_minute': '125min',
+        'in_5_hour': '5h',
+        'in_6_hour': '6h',
+        'in_8_hour': '8h',
+        'in_10_hour': '10h',
+        'in_12_hour': '12h',
+    }
 
-        # Fetch initial data
-        symbol_data = fetch_data(symbol, exchange, interval, n_bars, fut_contract)
-        if symbol_data is None or symbol_data.empty:
-            print(f"No data found for symbol {symbol} on exchange {exchange} with interval {interval}")
-            return None, None
-        stock_data.index = stock_data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
-
-        symbol_data = symbol_data.round(2)
-
-        # Mapping resampling rules
-        RULE_MAP = {
-            'in_10_minute': '10min',
-            'in_75_minute': '75min',
-            'in_125_minute': '125min',
-            'in_5_hour': '5h',
-            'in_6_hour': '6h',
-            'in_8_hour': '8h',
-            'in_10_hour': '10h',
-            'in_12_hour': '12h',
-        }
-
-        rule = RULE_MAP.get(interval_str)
-        if not rule:
-            print(f"Invalid interval_str: {interval_str}. No resampling rule found.")
-            return None, None
-
-        # Resample the data
-        symbol_data_resampled = symbol_data.resample(rule=rule, closed='left', label='left', origin=symbol_data.index.min()).agg(
-            OrderedDict([
-                ('open', 'first'),
-                ('high', 'max'),
-                ('low', 'min'),
-                ('close', 'last'),
-                ('volume', 'sum')
-            ])
-        ).dropna()
-
-        # Fetch higher time frame (HTF) data
-        symbol_data_htf = fetch_data(symbol, exchange, htf_interval, n_bars, fut_contract)
-        if symbol_data_htf is None or symbol_data_htf.empty:
-            print(f"No HTF data found for symbol {symbol} on exchange {exchange} with interval {htf_interval}")
-            return None, None
-        stock_data_htf.index = stock_data_htf.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
-
-        symbol_data_htf = symbol_data_htf.round(2)
-
-        return symbol_data_resampled, symbol_data_htf
-
-    except Exception as e:
-        print(f"Error fetching or processing data for symbol {symbol}: {e}")
+    rule = RULE_MAP.get(interval_str)
+    if not rule:
+        print(f"Invalid interval_str: {interval_str}. No resampling rule found.")
         return None, None
+
+    # Fetch initial data
+    symbol_data = fetch_data(tv_datafeed, symbol, exchange, interval, n_bars, fut_contract)
+    if symbol_data is None or symbol_data.empty:
+        print(f"No data found for symbol {symbol} on exchange {exchange} with interval {interval}")
+        return None, None
+
+    # Resample the data
+    symbol_data_resampled = symbol_data.resample(rule=rule, closed='left', label='left', origin=symbol_data.index.min()).agg(
+        OrderedDict([
+            ('open', 'first'),
+            ('high', 'max'),
+            ('low', 'min'),
+            ('close', 'last'),
+            ('volume', 'sum')
+        ])
+    ).dropna()
+
+    # Fetch higher time frame (HTF) data
+    symbol_data_htf = fetch_data(tv_datafeed, symbol, exchange, htf_interval, n_bars, fut_contract)
+    if symbol_data_htf is None or symbol_data_htf.empty:
+        print(f"No HTF data found for symbol {symbol} on exchange {exchange} with interval {htf_interval}")
+        return None, None
+
+    return symbol_data_resampled, symbol_data_htf
+
+def fetch_stock_data(sym, exchange, interval, interval_enum, htf_interval_enum, n_bars, fut_contract=None):
+    """
+    Fetches stock data for a given symbol and interval.
+
+    Args:
+        sym (str): The stock symbol.
+        exchange (str): The exchange name.
+        interval: The interval for fetching the initial data.
+        interval_enum: The interval enum for fetching the initial data.
+        htf_interval_enum: The higher time frame (HTF) interval enum for fetching additional data.
+        n_bars (int): The number of bars to fetch.
+        fut_contract (int): The futures contract ID, if applicable.
+
+    Returns:
+        tuple: A tuple containing two DataFrames: (symbol_data, symbol_data_htf).
+              Returns (None, None) if data fetching fails.
+    """
+    tv_datafeed = TvDatafeed()
+
+    symbol_data = fetch_data(tv_datafeed, sym, exchange, interval_enum, n_bars, fut_contract)
+    symbol_data_htf = fetch_data(tv_datafeed, sym, exchange, htf_interval_enum, n_bars, fut_contract)
+
+    return symbol_data, symbol_data_htf
 
 @app.get("/")
 def home():
@@ -185,20 +209,9 @@ def fetch_data(
             if interval in ['in_10_minute', 'in_75_minute', 'in_125_minute']:
                 stock_data, stock_data_htf = fetch_stock_data_and_resample(sym, exchange, interval, interval_enum,htf_interval_enum, n_bars, fut_contract)
             else:
-                tv_datafeed = TvDatafeed()
-                if fut_contract:
-                   stock_data = tv_datafeed.get_hist(symbol=sym, exchange=exchange, interval=interval_enum, n_bars=n_bars, fut_contract=fut_contract)
-                   stock_data.index = stock_data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+                stock_data, stock_data_htf = fetch_stock_data(sym, exchange, interval, interval_enum,htf_interval_enum, n_bars,fut_contract)
+                
 
-                    stock_data_htf = tv_datafeed.get_hist(symbol=sym, exchange=exchange, interval=htf_interval_enum, n_bars=n_bars, fut_contract=fut_contract)
-                    stock_data_htf.index = stock_data_htf.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
-                    
-                else:
-                    stock_data = tv_datafeed.get_hist(symbol=sym, exchange=exchange, interval=interval_enum, n_bars=n_bars)
-                    stock_data.index = stock_data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
-
-                    stock_data_htf = tv_datafeed.get_hist(symbol=sym, exchange=exchange, interval=htf_interval_enum, n_bars=n_bars)
-                    stock_data_htf.index = stock_data_htf.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
             # Correct check for empty DataFrame
             if stock_data is not None and not stock_data.empty:
                 stock_data = calculate_atr(stock_data)
