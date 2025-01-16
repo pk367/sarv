@@ -883,7 +883,6 @@ def fetch_data_endpoint(
         # Process collected patterns
         try:
             df = pd.DataFrame(all_patterns)
-            print(df.columns)
             df.fillna(0, inplace=True)
             data_to_insert = [tuple(row) for row in df.values]
             data_to_insert = [
