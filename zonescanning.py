@@ -3,8 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from tvDatafeed import TvDatafeed, Interval
 import pandas as pd
 import mysql.connector
-import json
 import logging
+import pytz
+import json
+import time
 
 app = FastAPI()
 
@@ -16,6 +18,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def create_db_config(suffix):
+    try:
+        return {
+            'user': f'u417995338_stocksZoneData',
+            'password': 'Host@0904',
+            'host': 'srv1668.hstgr.io',
+            'database': f'u417995338_stocksZoneData',
+            'connection_timeout': 100000  # Set connection timeout
+        }
+    except Exception as e:
+        logger.error(f"Error creating DB config: {e}")
+        return None
 
 def calculate_atr(stock_data, length=14):
     stock_data['previous_close'] = stock_data['close'].shift(1)
