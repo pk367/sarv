@@ -759,11 +759,7 @@ def batch_insert_candles(cursor, data_to_insert):
         except Exception as e:
             logger.error(f"Error during batch insert: {e}")
             raise
-
-@app.get("/")
-def home():
-    return {"message": "Welcome to the Stock Data API"}
-
+            
 @app.get("/fetch_data")
 def fetch_data_endpoint(
     symbol: str = Query(..., description="Comma-separated stock symbols"),
@@ -775,7 +771,6 @@ def fetch_data_endpoint(
     """
     Endpoint to fetch stock data using tvDatafeed.
     """
-
     INTERVAL_MAP = {
         "in_1_minute": Interval.in_1_minute,
         "in_3_minute": Interval.in_3_minute,
@@ -857,7 +852,7 @@ def fetch_data_endpoint(
                 stock_data = stock_data.drop(columns=['tr1', 'tr2', 'tr3', 'previous_close'], errors='ignore')
 
                 patterns = find_patterns(
-                    sym,exchange, stock_data, stock_data_htf, interval,
+                    sym, exchange, stock_data, stock_data_htf, interval,
                     max_base_candles, reward_value,
                     scan_demand_zone_allowed, scan_supply_zone_allowed,
                     fresh_zone_allowed, target_zone_allowed,
@@ -865,9 +860,7 @@ def fetch_data_endpoint(
                 )
 
                 if patterns:
-                    # print(f"{len(patterns)}")
                     all_patterns.extend(patterns)
-                    #print(f"{len(patterns)} zones found in {sym}")
 
         except Exception as ticker_error:
             logger.error(f"Error processing ticker {sym}: {ticker_error}")
