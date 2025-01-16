@@ -717,14 +717,14 @@ def batch_insert_candles(cursor, data_to_insert):
         batch = data_to_insert[i:i + batch_size]
         insert_query = """
             INSERT INTO zone_data (
-                symbol,exchange, timeframe,
+                symbol, exchange, timeframe,
                 zone_status, zone_type, entry_price, stop_loss, target,
                 legin_date, base_count, legout_count, legout_date,
                 entry_date, exit_date,
                 is_pulse_positive, is_candle_green, is_trend_up,
                 is_white_area, legin_not_covered, is_legout_formation,
                 is_wick_in_legin, is_legin_tr_pass, is_legout_covered,
-                is_one_two_ka_four ,ohlc_data  
+                is_one_two_ka_four, ohlc_data  
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
