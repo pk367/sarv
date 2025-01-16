@@ -1,3 +1,111 @@
+from fastapi import FastAPI, Query, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from tvDatafeed import TvDatafeed, Interval
+import pandas as pd
+
+app = FastAPI()
+
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for testing; restrict in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+def calculate_atr(stock_data, length=14):
+    stock_data['previous_close'] = stock_data['close'].shift(1)
+    stock_data['tr1'] = abs(stock_data['high'] - stock_data['low'])
+    stock_data['tr2'] = abs(stock_data['high'] - stock_data['previous_close'])
+    stock_data['tr3'] = abs(stock_data['low'] - stock_data['previous_close'])
+    stock_data['TR'] = stock_data[['tr1', 'tr2', 'tr3']].max(axis=1)
+
+    def rma(series, length):
+        alpha = 1 / length
+        return series.ewm(alpha=alpha, adjust=False).mean()
+
+    stock_data['ATR'] = rma(stock_data['TR'], length)
+    stock_data['Candle_Range'] = stock_data['high'] - stock_data['low']
+    stock_data['Candle_Body'] = abs(stock_data['close'] - stock_data['open'])
+    return stock_data.round(2)
+    
+def capture_ohlc_data(stock_data, exit_index, i):
+    stock_data = stock_data.drop(columns=['symbol'])
+    start_index = max(0, i - 12)
+    end_index = min(len(stock_data), exit_index + 12 if exit_index is not None else (i + 12))
+    ohlc_data = stock_data.iloc[start_index:end_index]
+    ohlc_data = ohlc_data.reset_index().to_dict(orient='records')
+    # Convert datetime to string format
+    for record in ohlc_data:
+        if 'datetime' in record:
+            record['datetime'] = record['datetime'].strftime('%Y-%m-%d %H:%M:%S')  # Convert to string
+
+    return ohlc_data
+    
+def fetch_data(tv_datafeed, symbol, exchange, interval, n_bars, fut_contract=None):
+    """Fetches historical data for the given symbol and interval."""
+    try:
+        if fut_contract:
+            data = tv_datafeed.get_hist(symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars, fut_contract=fut_contract)
+        else:
+            data = tv_datafeed.get_hist(symbol=symbol, exchange=exchange, interval=interval, n_bars=n_bars)
+        
+        if data is not None and not data.empty:
+            data.index = data.index.tz_localize('UTC').tz_convert('Asia/Kolkata')
+            data = data.round(2)
+        return data
+    except Exception as e:
+        print(f"Error fetching data for symbol {symbol}: {e}")
+        return None
+
+def fetch_stock_data_and_resample(symbol, exchange, interval_str, interval, htf_interval, n_bars, fut_contract):
+    """
+    Fetches and resamples stock data for a given symbol and interval.
+    """
+    tv_datafeed = TvDatafeed()
+
+    # Mapping resampling rules
+    RULE_MAP = {
+            'in_10_minute': '10min',
+            'in_75_minute': '75min',
+            'in_125_minute': '125min',
+            'in_5_hour': '5h',
+            'in_6_hour': '6h',
+            'in_8_hour': '8h',
+            'in_10_hour': '10h',
+            'in_12_hour': '12h',
+    }
+
+    rule = RULE_MAP.get(interval_str)
+    if not rule:
+        print(f"Invalid interval_str: {interval_str}. No resampling rule found.")
+        return None, None
+
+    # Fetch initial data
+    symbol_data = fetch_data(tv_datafeed, symbol, exchange, interval, n_bars, fut_contract)
+    if symbol_data is None or symbol_data.empty:
+        print(f"No data found for symbol {symbol} on exchange {exchange} with interval {interval}")
+        return None, None
+
+    # Resample the data
+    symbol_data_resampled = symbol_data.resample(rule=rule, closed='left', label='left', origin=symbol_data.index.min()).agg({
+        'open': 'first',
+        'high': 'max',
+        'low': 'min',
+        'close': 'last',
+        'volume': 'sum'
+    }).dropna()
+
+    # Fetch higher time frame (HTF) data
+    symbol_data_htf = fetch_data(tv_datafeed, symbol, exchange, htf_interval, n_bars, fut_contract)
+    if symbol_data_htf is None or symbol_data_htf.empty:
+        print(f"No HTF data found for symbol {symbol} on exchange {exchange} with interval {htf_interval}")
+        return None, None
+
+    return symbol_data_resampled, symbol_data_htf
+    
+
 def check_golden_crossover(stock_data_htf, pulse_check_start_date):
     is_pulse_positive = ""  # Initialize an empty string to store the is_pulse_positive
     is_candle_green = ""
@@ -255,7 +363,7 @@ def find_patterns(ticker, stock_data, stock_data_htf, interval_key, max_base_can
                                 Pattern_name_is = 'DZ(DBR)' if stock_data['open'].iloc[legin_candle_index] > stock_data['close'].iloc[legin_candle_index] else 'DZ(RBR)'
                                 legin_base_legout_ranges = f"{round(legin_candle_range)}:{round(actual_base_candle_range)}:{round(legout_candle_range)}"
 
-                                #ohlc_data = capture_ohlc_data(stock_data, exit_index, i)
+                                ohlc_data = capture_ohlc_data(stock_data, exit_index, i)
                                 #print(f"entry date is :{stock_data.index[m]}")
                                 pulse_check_start_date = pd.to_datetime(entry_date).strftime('%Y-%m-%d %H:%M:%S') if entry_date is not None else pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
                                 #print(f"Pulse Check Start Date: {(pulse_check_start_date)}")
@@ -337,7 +445,7 @@ def find_patterns(ticker, stock_data, stock_data_htf, interval_key, max_base_can
                                             'is_legout_covered': legout_covered,
                                             'is_one_two_ka_four': one_two_ka_four,
 
-                                            #'ohlc_data': ohlc_data,
+                                            'ohlc_data': ohlc_data,
                                        })
 
             if scan_supply_zone_allowed and (stock_data['open'].iloc[i] > stock_data['close'].iloc[i] and
@@ -483,7 +591,7 @@ def find_patterns(ticker, stock_data, stock_data_htf, interval_key, max_base_can
 
                                 Pattern_name_is = 'SZ(RBD)' if stock_data['close'].iloc[legin_candle_index] > stock_data['open'].iloc[legin_candle_index] else 'SZ(DBD)'
 
-                                #ohlc_data = capture_ohlc_data(stock_data, exit_index, i)
+                                ohlc_data = capture_ohlc_data(stock_data, exit_index, i)
 
                                 pulse_check_start_date = pd.to_datetime(entry_date).strftime('%Y-%m-%d %H:%M:%S') if entry_date is not None else pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
                                 #print(f"Pulse Check Start Date: {(pulse_check_start_date)}")
@@ -568,7 +676,7 @@ def find_patterns(ticker, stock_data, stock_data_htf, interval_key, max_base_can
                                             'is_legout_covered': legout_covered,
                                             'is_one_two_ka_four': one_two_ka_four,
 
-                                            #'ohlc_data': ohlc_data,
+                                            'ohlc_data': ohlc_data,
                                         })
 
         return patterns
@@ -625,3 +733,182 @@ def batch_insert_candles(cursor, data_to_insert):
         except Exception as e:
             logger.error(f"Error during batch insert: {e}")
             raise
+
+@app.get("/")
+def home():
+    return {"message": "Welcome to the Stock Data API"}
+
+@app.get("/fetch_data")
+def fetch_data_endpoint(
+    symbol: str = Query(..., description="Comma-separated stock symbols"),
+    exchange: str = Query(..., description="Exchange name"),
+    interval: str = Query("in_daily", description="Interval string"),
+    n_bars: int = Query(5000, description="Number of bars to fetch"),
+    fut_contract: Optional[int] = Query(None, description="Futures contract ID, if applicable")
+):
+    """
+    Endpoint to fetch stock data using tvDatafeed.
+    """
+
+    INTERVAL_MAP = {
+    "in_1_minute": Interval.in_1_minute,
+    "in_3_minute": Interval.in_3_minute,
+    "in_5_minute": Interval.in_5_minute,
+    "in_10_minute": Interval.in_5_minute,
+    "in_15_minute": Interval.in_15_minute,
+    "in_30_minute": Interval.in_30_minute,
+    "in_45_minute": Interval.in_45_minute,
+    "in_75_minute": Interval.in_15_minute,
+    "in_125_minute": Interval.in_5_minute,
+    "in_1_hour": Interval.in_1_hour,
+    "in_2_hour": Interval.in_2_hour,
+    "in_3_hour": Interval.in_3_hour,
+    "in_4_hour": Interval.in_4_hour,
+    "in_5_hour": Interval.in_1_hour,
+    "in_6_hour": Interval.in_3_hour,
+    "in_8_hour": Interval.in_4_hour,
+    "in_10_hour": Interval.in_1_hour,
+    "in_12_hour": Interval.in_1_hour,
+    "in_daily": Interval.in_daily,
+    "in_weekly": Interval.in_weekly,
+    "in_monthly": Interval.in_monthly,
+    }
+    HTF_INTERVAL_MAP = {
+    "in_1_minute": Interval.in_15_minute,
+    "in_3_minute": Interval.in_1_hour,
+    "in_5_minute": Interval.in_1_hour,
+    "in_10_minute": Interval.in_daily,
+    "in_15_minute": Interval.in_daily,
+    "in_30_minute": Interval.in_daily,
+    "in_1_hour": Interval.in_weekly,
+    "in_75_minute": Interval.in_weekly,
+    "in_2_hour": Interval.in_weekly,
+    "in_125_minute": Interval.in_weekly,
+    "in_daily": Interval.in_monthly,
+    "in_weekly": Interval.in_monthly,
+    "in_monthly": Interval.in_monthly,
+    }
+
+    reward_mapping = {
+        'in_1_minute': 3,
+        'in_3_minute': 3,
+        'in_5_minute': 3,
+        'in_daily': 10,
+        'in_weekly': 10,
+        'in_monthly': 10
+    }
+    
+    max_base_candles = 3
+    fresh_zone_allowed = True
+    target_zone_allowed = True
+    stoploss_zone_allowed = True
+    scan_demand_zone_allowed = True
+    scan_supply_zone_allowed = True
+
+    symbols = [s.strip() for s in symbol.split(",")]
+    interval_enum = INTERVAL_MAP.get(interval)
+    htf_interval_enum = HTF_INTERVAL_MAP.get(interval)
+    reward_value = reward_mapping.get(interval, 5)
+
+    connections = {}
+    cursors = {}
+    response_body = {"errors": [], "success": False}  # Added success flag
+    if not interval_enum:
+        raise HTTPException(status_code=400, detail=f"Invalid 'interval' value: {interval}")
+
+    result = {}
+    tv_datafeed = TvDatafeed()  # Initialize TvDatafeed once
+
+    for sym in symbols:
+        try:
+            if interval in ['in_10_minute', 'in_75_minute', 'in_125_minute']:
+                stock_data, stock_data_htf = fetch_stock_data_and_resample(sym, exchange, interval, interval_enum, htf_interval_enum, n_bars, fut_contract)
+            else:
+                stock_data = fetch_data(tv_datafeed, sym, exchange, interval_enum, n_bars, fut_contract)
+                stock_data_htf = fetch_data(tv_datafeed, sym, exchange, htf_interval_enum, n_bars, fut_contract)
+
+            if stock_data is not None and not stock_data.empty:
+                stock_data = calculate_atr(stock_data)
+                stock_data = stock_data.drop(columns=['tr1', 'tr2', 'tr3', 'previous_close'], errors='ignore')
+            else:
+                result[sym] = {"error": f"No data found for symbol {sym}"}
+                continue
+
+            patterns = find_patterns(
+                sym, stock_data, stock_data_htf, interval,
+                max_base_candles, reward_value,
+                scan_demand_zone_allowed, scan_supply_zone_allowed,
+                fresh_zone_allowed, target_zone_allowed,
+                stoploss_zone_allowed, htf_interval_enum
+            )
+
+            if patterns:
+                print(f"{len(patterns)} zones found in {sym}")
+                # Process collected patterns
+                try:
+                    df = pd.DataFrame(patterns)
+                    df.fillna(0, inplace=True)
+                    data_to_insert = [tuple(row) for row in df.values]
+                    # Create zonedata connection
+                    config = create_db_config(interval)
+                    connections['zone'] = mysql.connector.connect(**config)
+                    cursors['zone'] = connections['zone'].cursor()
+                    # Create table if not exists
+                    create_table_query = """
+                    CREATE TABLE IF NOT EXISTS zone_data (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        symbol VARCHAR(20),
+                        timeframe VARCHAR(5),
+                        zone_status VARCHAR(10),
+                        zone_type VARCHAR(8),
+                        entry_price DECIMAL(10, 2),
+                        stop_loss DECIMAL(10, 2),
+                        target DECIMAL(10, 2),
+                        legin_date DATETIME,
+                        base_count INT,
+                        legout_count INT,
+                        legout_date DATETIME,
+                        entry_date DATETIME,
+                        exit_date DATETIME,
+                        is_pulse_positive VARCHAR(6),
+                        is_candle_green VARCHAR(6),
+                        is_trend_up VARCHAR(6),
+                        is_white_area VARCHAR(6),
+                        legin_not_covered VARCHAR(6),
+                        is_legout_formation VARCHAR(6),
+                        is_wick_in_legin VARCHAR(6),
+                        is_legin_tr_pass VARCHAR(6),
+                        is_legout_covered VARCHAR(6),
+                        is_one_two_ka_four VARCHAR(6),
+                        UNIQUE KEY unique_pattern (symbol, timeframe, entry_date, zone_type)
+                    );
+                    """
+                    cursors['zone'].execute(create_table_query)
+
+                    # Insert data
+                    batch_insert_candles(cursors['zone'], data_to_insert)
+                    connections['zone'].commit()
+                    response_body["success"] = True
+                    print(f"For {sym}, total {len(df)} zone data successfully uploaded to database.")
+
+                except Exception as db_error:
+                    logger.error(f"Database operation error: {db_error}")
+                    response_body["errors"].append(f"Database operation error: {str(db_error)}")
+                    if 'zone' in connections:
+                        connections['zone'].rollback()
+
+                finally:
+                    if 'zone' in cursors and cursors['zone']:
+                        cursors['zone'].close()
+                    if 'zone' in connections and connections['zone']:
+                        connections['zone'].close()
+
+        except Exception as ticker_error:
+            logger.error(f"Error processing ticker {sym}: {ticker_error}")
+            response_body["errors"].append(f"Error processing {sym}: {str(ticker_error)}")
+
+    return response_body
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001)
