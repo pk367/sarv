@@ -861,7 +861,7 @@ def fetch_data_endpoint(
                 stock_data = stock_data.drop(columns=['tr1', 'tr2', 'tr3', 'previous_close'], errors='ignore')
 
                 patterns = find_patterns(
-                    sym,exchange, stock_data, stock_data_htf, interval,
+                    sym, exchange, stock_data, stock_data_htf, interval,
                     max_base_candles, reward_value,
                     scan_demand_zone_allowed, scan_supply_zone_allowed,
                     fresh_zone_allowed, target_zone_allowed,
@@ -869,9 +869,7 @@ def fetch_data_endpoint(
                 )
 
                 if patterns:
-                    # print(f"{len(patterns)}")
                     all_patterns.extend(patterns)
-                    #print(f"{len(patterns)} zones found in {sym}")
 
         except Exception as ticker_error:
             logger.error(f"Error processing ticker {sym}: {ticker_error}")
@@ -922,7 +920,7 @@ def fetch_data_endpoint(
                 is_legout_covered VARCHAR(6),
                 is_one_two_ka_four VARCHAR(6),
                 ohlc_data JSON,
-                UNIQUE KEY unique_pattern (symbol, timeframe, entry_date, zone_type)
+                UNIQUE KEY unique_pattern (symbol, timeframe, legin_date, zone_type, zone_status)  -- Updated unique key
             );
             """
             cursors['zone'].execute(create_table_query)
