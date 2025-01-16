@@ -711,20 +711,21 @@ def find_patterns(ticker, exchange, stock_data, stock_data_htf, interval_key, ma
         return []
 
 
+ 
 def batch_insert_candles(cursor, data_to_insert):
     batch_size = 3000  # Adjust this size as necessary
     for i in range(0, len(data_to_insert), batch_size):
         batch = data_to_insert[i:i + batch_size]
         insert_query = """
             INSERT INTO zone_data (
-                symbol, exchange, timeframe,
+                symbol,exchange, timeframe,
                 zone_status, zone_type, entry_price, stop_loss, target,
                 legin_date, base_count, legout_count, legout_date,
                 entry_date, exit_date,
                 is_pulse_positive, is_candle_green, is_trend_up,
                 is_white_area, legin_not_covered, is_legout_formation,
                 is_wick_in_legin, is_legin_tr_pass, is_legout_covered,
-                is_one_two_ka_four, ohlc_data  
+                is_one_two_ka_four ,ohlc_data  
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
@@ -759,7 +760,11 @@ def batch_insert_candles(cursor, data_to_insert):
         except Exception as e:
             logger.error(f"Error during batch insert: {e}")
             raise
-            
+
+@app.get("/")
+def home():
+    return {"message": "Welcome to the Stock Data API"}
+
 @app.get("/fetch_data")
 def fetch_data_endpoint(
     symbol: str = Query(..., description="Comma-separated stock symbols"),
@@ -771,6 +776,7 @@ def fetch_data_endpoint(
     """
     Endpoint to fetch stock data using tvDatafeed.
     """
+
     INTERVAL_MAP = {
         "in_1_minute": Interval.in_1_minute,
         "in_3_minute": Interval.in_3_minute,
@@ -852,7 +858,7 @@ def fetch_data_endpoint(
                 stock_data = stock_data.drop(columns=['tr1', 'tr2', 'tr3', 'previous_close'], errors='ignore')
 
                 patterns = find_patterns(
-                    sym, exchange, stock_data, stock_data_htf, interval,
+                    sym,exchange, stock_data, stock_data_htf, interval,
                     max_base_candles, reward_value,
                     scan_demand_zone_allowed, scan_supply_zone_allowed,
                     fresh_zone_allowed, target_zone_allowed,
@@ -860,7 +866,9 @@ def fetch_data_endpoint(
                 )
 
                 if patterns:
+                    # print(f"{len(patterns)}")
                     all_patterns.extend(patterns)
+                    #print(f"{len(patterns)} zones found in {sym}")
 
         except Exception as ticker_error:
             logger.error(f"Error processing ticker {sym}: {ticker_error}")
@@ -872,6 +880,7 @@ def fetch_data_endpoint(
         # Process collected patterns
         try:
             df = pd.DataFrame(all_patterns)
+            print(df.columns)
             df.fillna(0, inplace=True)
             data_to_insert = [tuple(row) for row in df.values]
             data_to_insert = [
