@@ -92,9 +92,14 @@ def fetch_stock_data_and_resample(symbol, exchange, interval_str, interval, htf_
 
     # Mapping resampling rules
     RULE_MAP = {
-        'in_10_minute': '10min',
-        'in_75_minute': '75min',
-        'in_125_minute': '125min',
+            'in_10_minute': '10min',
+            'in_75_minute': '75min',
+            'in_125_minute': '125min',
+            'in_5_hour': '5h',
+            'in_6_hour': '6h',
+            'in_8_hour': '8h',
+            'in_10_hour': '10h',
+            'in_12_hour': '12h',
     }
 
     rule = RULE_MAP.get(interval_str)
