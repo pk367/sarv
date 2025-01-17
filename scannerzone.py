@@ -719,8 +719,7 @@ def find_patterns(ticker, exchange, stock_data, stock_data_htf, interval_key, ma
         print(traceback.format_exc())  # Correct usage
         return []
 
-
- def batch_insert_candles(cursor, data_to_insert):
+def batch_insert_candles(cursor, data_to_insert):
     batch_size = 3000  # Adjust this size as necessary
     for i in range(0, len(data_to_insert), batch_size):
         batch = data_to_insert[i:i + batch_size]
