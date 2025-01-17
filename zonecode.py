@@ -916,7 +916,7 @@ def fetch_data_endpoint(
                 legout_date DATETIME,
                 entry_date DATETIME,
                 exit_date DATETIME,
-                zone_distance DECIMAL(10, 2)
+                zone_distance DECIMAL(10, 2),
                 is_pulse_positive VARCHAR(6),
                 is_candle_green VARCHAR(6),
                 is_trend_up VARCHAR(6),
