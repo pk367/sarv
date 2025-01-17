@@ -395,7 +395,7 @@ def find_patterns(ticker, exchange, stock_data, stock_data_htf, interval_key, ma
                                 #print(f"Pulse Check Start Date: {(pulse_check_start_date)}")
 
                                 is_pulse_positive,is_candle_green,is_trend_up = check_golden_crossover(stock_data_htf, pulse_check_start_date)
-                                latest_closing_price = round(stock_data['Close'].iloc[-1], 2)
+                                latest_closing_price = round(stock_data['close'].iloc[-1], 2)
                                 zone_distance = (math.floor(latest_closing_price) - max(high_prices)) / max(high_prices) * 100
 
                                 if ((fresh_zone_allowed and Zone_status == 'Fresh') or \
@@ -627,7 +627,7 @@ def find_patterns(ticker, exchange, stock_data, stock_data_htf, interval_key, ma
                                 #print(f"Pulse Check Start Date: {(pulse_check_start_date)}")
 
                                 is_pulse_positive,is_candle_green,is_trend_up = check_golden_crossover(stock_data_htf, pulse_check_start_date)
-                                latest_closing_price = round(stock_data['Close'].iloc[-1], 2)
+                                latest_closing_price = round(stock_data['close'].iloc[-1], 2)
                                 zone_distance = (min(low_prices) - math.floor(latest_closing_price)) / min(low_prices) * 100
 
                                 if ((fresh_zone_allowed and Zone_status == 'Fresh') or \
