@@ -395,6 +395,8 @@ def find_patterns(ticker, exchange, stock_data, stock_data_htf, interval_key, ma
                                 #print(f"Pulse Check Start Date: {(pulse_check_start_date)}")
 
                                 is_pulse_positive,is_candle_green,is_trend_up = check_golden_crossover(stock_data_htf, pulse_check_start_date)
+                                latest_closing_price = round(stock_data['Close'].iloc[-1], 2)
+                                zone_distance = (math.floor(latest_closing_price) - max(high_prices)) / max(high_prices) * 100
 
                                 if ((fresh_zone_allowed and Zone_status == 'Fresh') or \
                                    (target_zone_allowed and Zone_status == 'Target') or \
@@ -459,6 +461,7 @@ def find_patterns(ticker, exchange, stock_data, stock_data_htf, interval_key, ma
                                             'legout_date': legout_date,
                                             'entry_date': entry_date,
                                             'exit_date': exit_date,
+                                            'zone_distance':zone_distance,
 
                                             'is_pulse_positive': is_pulse_positive,
                                             'is_candle_green': is_candle_green,
@@ -624,6 +627,8 @@ def find_patterns(ticker, exchange, stock_data, stock_data_htf, interval_key, ma
                                 #print(f"Pulse Check Start Date: {(pulse_check_start_date)}")
 
                                 is_pulse_positive,is_candle_green,is_trend_up = check_golden_crossover(stock_data_htf, pulse_check_start_date)
+                                latest_closing_price = round(stock_data['Close'].iloc[-1], 2)
+                                zone_distance = (min(low_prices) - math.floor(latest_closing_price)) / min(low_prices) * 100
 
                                 if ((fresh_zone_allowed and Zone_status == 'Fresh') or \
                                    (target_zone_allowed and Zone_status == 'Target') or \
@@ -691,6 +696,7 @@ def find_patterns(ticker, exchange, stock_data, stock_data_htf, interval_key, ma
                                             'legout_date': legout_date,
                                             'entry_date': entry_date,
                                             'exit_date': exit_date,
+                                            'zone_distance':zone_distance,
 
                                             'is_pulse_positive': is_pulse_positive,
                                             'is_candle_green': is_candle_green,
@@ -714,8 +720,7 @@ def find_patterns(ticker, exchange, stock_data, stock_data_htf, interval_key, ma
         return []
 
 
- 
-def batch_insert_candles(cursor, data_to_insert):
+ def batch_insert_candles(cursor, data_to_insert):
     batch_size = 3000  # Adjust this size as necessary
     for i in range(0, len(data_to_insert), batch_size):
         batch = data_to_insert[i:i + batch_size]
@@ -724,13 +729,13 @@ def batch_insert_candles(cursor, data_to_insert):
                 symbol, exchange, timeframe,
                 zone_status, zone_type, entry_price, stop_loss, target,
                 legin_date, base_count, legout_count, legout_date,
-                entry_date, exit_date,
+                entry_date, exit_date, zone_distance,
                 is_pulse_positive, is_candle_green, is_trend_up,
                 is_white_area, legin_not_covered, is_legout_formation,
                 is_wick_in_legin, is_legin_tr_pass, is_legout_covered,
                 is_one_two_ka_four, ohlc_data  
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON DUPLICATE KEY UPDATE
                 entry_price = VALUES(entry_price),
                 stop_loss = VALUES(stop_loss),
@@ -757,11 +762,11 @@ def batch_insert_candles(cursor, data_to_insert):
         try:
             cursor.executemany(insert_query, batch)
             logger.info(f"Inserted {len(batch)} rows of pattern data.")
-        except mysql.connector.Error as err:
+        except Error as err:
             logger.error(f"Database error during batch insert: {err}")
             raise
         except Exception as e:
-            logger.error(f"Error during batch insert: {e}")
+            logger.error(f"Unexpected error during batch insert: {e}")
             raise
 
 @app.get("/")
@@ -909,6 +914,7 @@ def fetch_data_endpoint(
                 legout_date DATETIME,
                 entry_date DATETIME,
                 exit_date DATETIME,
+                zone_distance DECIMAL(10, 2)
                 is_pulse_positive VARCHAR(6),
                 is_candle_green VARCHAR(6),
                 is_trend_up VARCHAR(6),
