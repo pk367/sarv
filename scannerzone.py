@@ -768,6 +768,9 @@ def batch_insert_candles(cursor, data_to_insert):
             logger.error(f"Unexpected error during batch insert: {e}")
             raise
 
+
+
+
 @app.get("/")
 def home():
     return {"message": "Welcome to the Stock Data API"}
